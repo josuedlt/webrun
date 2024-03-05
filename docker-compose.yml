@@ -1,0 +1,10 @@
+version: '3.6'
+services:
+
+  builder:
+    image: josuedlt/webrun-build
+    build: 
+      context: .
+      dockerfile: build.Dockerfile
+    volumes:
+      - ./build:/build
