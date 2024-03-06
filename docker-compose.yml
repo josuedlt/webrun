@@ -8,3 +8,4 @@ services:
       dockerfile: build.Dockerfile
     volumes:
       - ./build:/build
+

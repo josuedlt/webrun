@@ -4,45 +4,84 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"josuedlt/webrun/basicLogger"
+	"io"
+	"log"
 	"net/http"
+	"os"
 	"os/exec"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
 const (
-	VERSION = "0.1"
+	VERSION = "0.2"
 )
 
 var (
-	configFile *string
-	god        *bool
-	logFile    *string
-	menuPath   *string
-	port       *int
-	routeMap   map[string]string
-	silent     *bool
+	configFile = flag.String("config", "webrun.config", "path to config file")
+	god        = flag.Bool("god", false, "enable god mode (default false)")
+	logFile    = flag.String("log", "", "path to log file (default blank)")
+	menuPath   = flag.String("menu", "/menu", "path to help menu")
+	port       = flag.Int("port", 8080, "port number")
+	silent     = flag.Bool("silent", false, "silent mode (default false)")
+	showErrors = flag.Bool("showErrors", false, "show stderr output (default false)")
+	routeMap   = make(map[string]string)
 )
 
 func init() {
-	configFile = flag.String("config", "webrun.config", "path to config file")
-	god = flag.Bool("god", false, "enable god mode (default false)")
-	logFile = flag.String("log", "", "path to log file (default blank)")
-	menuPath = flag.String("menu", "/menu", "path to help menu")
-	port = flag.Int("port", 8080, "port number")
-	silent = flag.Bool("silent", false, "silent mode (default false)")
-
 	flag.Parse()
+	{ // Override with environment variables
+		if v := os.Getenv("WEBRUN_CONFIGFILE"); v != "" {
+			*logFile = v
+		}
+		if v := os.Getenv("WEBRUN_GOD"); v != "" {
+			b, err := strconv.ParseBool(v)
+			if err == nil {
+				*god = b
+			}
+		}
+		if v := os.Getenv("WEBRUN_LOGFILE"); v != "" {
+			*logFile = v
+		}
+		if v := os.Getenv("WEBRUN_MENUPATH"); v != "" {
+			*menuPath = v
+		}
+		if v := os.Getenv("WEBRUN_PORT"); v != "" {
+			p, err := strconv.Atoi(v)
+			if err == nil {
+				*port = p
+			}
+		}
+		if v := os.Getenv("WEBRUN_SILENT"); v != "" {
+			b, err := strconv.ParseBool(v)
+			if err == nil {
+				*silent = b
+			}
+		}
+		if v := os.Getenv("WEBRUN_SHOWSTDERR"); v != "" {
+			b, err := strconv.ParseBool(v)
+			if err == nil {
+				*silent = b
+			}
+		}
+	}
+
+	routeMap = LoadRoutes()
+	{ // Override with command line args
+		if len(flag.Args()) > 0 {
+			routeMap["/"] = strings.Join(flag.Args(), " ")
+		}
+	}
 }
 
 func main() {
-	routeMap = GetRoutes()
-	logger := basicLogger.CreateLogger(*silent, *logFile)
-	logger.Println("\n📧 Written by Josue de la Torre (josue@jdlt.com)")
+	logger := CreateLogger(*silent, *logFile)
+	logger.Println("📧 Written by Josue de la Torre (josue@jdlt.com)")
 	logger.Println("🔀", len(routeMap), "Routes loaded:", routeMap)
 	if *god {
-		logger.Println("❗ God mode: enabled")
+		logger.Println("❗ Warning: God mode enabled")
 	}
 
 	{ // Start the web server
@@ -64,7 +103,7 @@ func main() {
 			{ // Reload routes...
 				if r.URL.Path == "/reload" {
 					logger.Println(r.URL.Path, "~~>", "reloading routes...")
-					routeMap = GetRoutes()
+					routeMap = LoadRoutes()
 					http.Redirect(w, r, *menuPath, http.StatusSeeOther)
 					return
 				}
@@ -73,7 +112,7 @@ func main() {
 			{ // Display route menu...
 				if r.URL.Path == *menuPath {
 					logger.Println(r.URL.Path, "~~>", "showing help menu...")
-					BuildHelpMenu(w, r, routeMap)
+					HelpMenuHandler(w, r, routeMap)
 					return
 				}
 			}
@@ -113,19 +152,26 @@ func CommandHandler(w http.ResponseWriter, r *http.Request, command string) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Content-Type", "text/event-stream")
-	stdOutScanner := bufio.NewScanner(stdout)
-	for stdOutScanner.Scan() {
-		fmt.Fprintln(w, stdOutScanner.Text())
+	stdOutScanner := bufio.NewReader(stdout)
+	for {
+		char, err := stdOutScanner.ReadByte()
+		if err != nil {
+			break
+		}
+		fmt.Fprint(w, string(char))
 		w.(http.Flusher).Flush()
 	}
-	stdErrScanner := bufio.NewScanner(stderr)
-	for stdErrScanner.Scan() {
-		fmt.Fprintln(w, stdErrScanner.Text())
-		w.(http.Flusher).Flush()
+
+	if *showErrors || *god {
+		stdErrScanner := bufio.NewScanner(stderr)
+		for stdErrScanner.Scan() {
+			fmt.Fprintln(w, stdErrScanner.Text())
+			w.(http.Flusher).Flush()
+		}
 	}
 }
 
-func BuildHelpMenu(w http.ResponseWriter, r *http.Request, routeMap map[string]string) {
+func HelpMenuHandler(w http.ResponseWriter, r *http.Request, routeMap map[string]string) {
 
 	fmt.Fprintln(w, "<p><a href='/reload'><button>Reload routes</button></a></p>")
 	if len(routeMap) == 0 {
@@ -140,4 +186,64 @@ func BuildHelpMenu(w http.ResponseWriter, r *http.Request, routeMap map[string]s
 	sort.Strings(items)
 
 	fmt.Fprintln(w, strings.Join(items, "\n"))
+}
+
+func CreateLogger(silent bool, logFile string) *log.Logger {
+	output := []io.Writer{}
+	if logFile != "" {
+		file, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		if err == nil {
+			output = append(output, file)
+		}
+	}
+	if !silent {
+		output = append(output, os.Stderr)
+	}
+	return log.New(io.MultiWriter(output...), "", log.LstdFlags)
+}
+
+func LoadRoutes() map[string]string {
+
+	routeMap := make(map[string]string)
+
+	{ // Load file fileRoutes...
+		var routes []string
+		readFile, err := os.Open(*configFile)
+		if err != nil {
+			// log.Println(err)
+		} else {
+			defer readFile.Close()
+			fileScanner := bufio.NewScanner(readFile)
+			fileScanner.Split(bufio.ScanLines)
+			for fileScanner.Scan() {
+				text := fileScanner.Text()
+				routes = append(routes, text)
+			}
+		}
+		updateRouteMap(routeMap, routes)
+	}
+
+	{ // Override with environment variables...
+		var routes []string
+		pattern := regexp.MustCompile(`^WEBRUN_ROUTE_\d+$`)
+		for _, e := range os.Environ() {
+			keyvalue := strings.SplitN(e, "=", 2)
+			key, value := keyvalue[0], keyvalue[1]
+			if pattern.MatchString(key) {
+				routes = append(routes, value)
+			}
+		}
+		updateRouteMap(routeMap, routes)
+	}
+
+	return routeMap
+}
+
+func updateRouteMap(routeMap map[string]string, routes []string) {
+	sort.Strings(routes)
+	for _, route := range routes {
+		parts := strings.Split(route, " ")
+		path, command := parts[0], strings.Join(parts[1:], " ")
+		routeMap[path] = command
+	}
 }
