@@ -3,9 +3,15 @@ services:
 
   builder:
     image: josuedlt/webrun-build
+    # network_mode: host
     build: 
       context: .
       dockerfile: build.Dockerfile
     volumes:
       - ./build:/build
+    #   - ./webrun.config:/webrun.config
+    # environment:
+    #   - WEBRUN_PORT=80
+    #   - WEBRUN_CONFIG=/webrun.config
+    #   - WEBRUN_ROUTE_1=/ ls
 

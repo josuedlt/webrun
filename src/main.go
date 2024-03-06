@@ -33,8 +33,8 @@ var (
 func init() {
 	flag.Parse()
 	{ // Override with environment variables
-		if v := os.Getenv("WEBRUN_CONFIGFILE"); v != "" {
-			*logFile = v
+		if v := os.Getenv("WEBRUN_CONFIG"); v != "" {
+			*configFile = v
 		}
 		if v := os.Getenv("WEBRUN_GOD"); v != "" {
 			b, err := strconv.ParseBool(v)
@@ -60,10 +60,10 @@ func init() {
 				*silent = b
 			}
 		}
-		if v := os.Getenv("WEBRUN_SHOWSTDERR"); v != "" {
+		if v := os.Getenv("WEBRUN_SHOWERRORS"); v != "" {
 			b, err := strconv.ParseBool(v)
 			if err == nil {
-				*silent = b
+				*showErrors = b
 			}
 		}
 	}
@@ -126,11 +126,12 @@ func main() {
 					}
 				}
 			}
-
 			logger.Println(r.URL.Path, "~~>", *menuPath)
 			http.Redirect(w, r, *menuPath, http.StatusSeeOther)
 		})
-		logger.Printf("🌐 Server started on port %v", *port)
+
+		hostname, _ := os.Hostname()
+		logger.Printf("🌐 Server started at http://%s:%v", hostname, *port)
 		logger.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", *port), nil))
 	}
 }
@@ -217,7 +218,9 @@ func LoadRoutes() map[string]string {
 			fileScanner.Split(bufio.ScanLines)
 			for fileScanner.Scan() {
 				text := fileScanner.Text()
-				routes = append(routes, text)
+				if text != "" {
+					routes = append(routes, text)
+				}
 			}
 		}
 		updateRouteMap(routeMap, routes)
