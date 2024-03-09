@@ -14,7 +14,7 @@ RUN GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o build/webrun-darwin-x8
 RUN GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o build/webrun-darwin-aarch64
 RUN GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o build/webrun-linux-x86_64
 RUN GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o build/webrun-linux-aarch64
-# RUN GOOS=linux GOARCH=arm GOARM=7 go build -ldflags="-s -w" -o build/webrun-linux-armv7
+RUN GOOS=linux GOARCH=arm GOARM=6 go build -ldflags="-s -w" -o build/webrun-linux-armv6l
 
 ### Enable Compression (takes time)
 RUN apk add --no-cache upx && upx build/webrun-* --force-macos
