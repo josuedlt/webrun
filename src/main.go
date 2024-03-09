@@ -138,11 +138,11 @@ func main() {
 
 func CommandHandler(w http.ResponseWriter, r *http.Request, command string) {
 	parts := strings.Split(command, " ")
-	process := exec.Command(parts[0], parts[1:]...)
-	stdout, _ := process.StdoutPipe()
-	stderr, _ := process.StderrPipe()
+	cmd := exec.Command(parts[0], parts[1:]...)
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
 
-	if err := process.Start(); err != nil {
+	if err := cmd.Start(); err != nil {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		fmt.Fprint(w, err)
 		w.(http.Flusher).Flush()
@@ -153,9 +153,15 @@ func CommandHandler(w http.ResponseWriter, r *http.Request, command string) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Content-Type", "text/event-stream")
-	stdOutScanner := bufio.NewReader(stdout)
+
+	input := []io.Reader{stdout}
+	if *showErrors || *god {
+		input = append(input, stderr)
+	}
+
+	reader := bufio.NewReader(io.MultiReader(input...))
 	for {
-		char, err := stdOutScanner.ReadByte()
+		char, err := reader.ReadByte()
 		if err != nil {
 			break
 		}
@@ -163,13 +169,7 @@ func CommandHandler(w http.ResponseWriter, r *http.Request, command string) {
 		w.(http.Flusher).Flush()
 	}
 
-	if *showErrors || *god {
-		stdErrScanner := bufio.NewScanner(stderr)
-		for stdErrScanner.Scan() {
-			fmt.Fprintln(w, stdErrScanner.Text())
-			w.(http.Flusher).Flush()
-		}
-	}
+	cmd.Wait()
 }
 
 func HelpMenuHandler(w http.ResponseWriter, r *http.Request, routeMap map[string]string) {
