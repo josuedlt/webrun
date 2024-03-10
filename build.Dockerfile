@@ -1,4 +1,5 @@
 FROM golang:alpine
+RUN apk add --no-cache upx 
 WORKDIR /src
 COPY src .
 RUN go mod tidy
@@ -8,15 +9,12 @@ RUN go mod tidy
 # RUN mv build/webrun build/webrun-$(uname -s)-$(uname -m)
 
 ### Build for known architectures:
-RUN GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o build/webrun-windows-x86_64.exe
-# RUN GOOS=windows GOARCH=arm64 go build -ldflags="-s -w" -o build/webrun-windows-arm64.exe
-RUN GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o build/webrun-darwin-x86_64
-RUN GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o build/webrun-darwin-aarch64
-RUN GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o build/webrun-linux-x86_64
-RUN GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o build/webrun-linux-aarch64
-RUN GOOS=linux GOARCH=arm GOARM=6 go build -ldflags="-s -w" -o build/webrun-linux-armv6l
-
-### Enable Compression (takes time)
-RUN apk add --no-cache upx && upx build/webrun-* --force-macos
+RUN mkdir build
+RUN GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o webrun.exe && upx webrun.exe && tar -czf build/webrun-windows-x86_64.tgz webrun.exe
+RUN GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o webrun && upx webrun --force-macos && tar -czf build/webrun-darwin-x86_64.tgz webrun
+RUN GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o webrun && upx webrun --force-macos && tar -czf build/webrun-darwin-aarch64.tgz webrun
+RUN GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o webrun && upx webrun && tar -czf build/webrun-linux-x86_64.tgz webrun
+RUN GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o webrun && upx webrun && tar -czf build/webrun-linux-aarch64.tgz webrun
+RUN GOOS=linux GOARCH=arm GOARM=6 go build -ldflags="-s -w" -o webrun && upx webrun && tar -czf build/webrun-linux-armv6l.tgz webrun
 
 ENTRYPOINT [ "/bin/sh", "-c", "cp -R build/* /build"]
