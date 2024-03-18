@@ -141,7 +141,7 @@ func CommandHandler(w http.ResponseWriter, r *http.Request, command string) {
 		return
 	}
 	
-	parts := strings.Split("sh -c" + command, " ")
+	parts := []string{"sh", "-c", command}
 	cmd := exec.Command(parts[0], parts[1:]...)
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()

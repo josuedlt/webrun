@@ -1,12 +1,12 @@
 FROM golang:alpine
-RUN apk add --no-cache upx 
+RUN apk add --no-cache upx
 WORKDIR /src
 COPY src .
 RUN go mod tidy
 
-### Build for current architecture
+# ### Local build and run
 # RUN go build -ldflags="-s -w" -o build/webrun
-# RUN mv build/webrun build/webrun-$(uname -s)-$(uname -m)
+# ENTRYPOINT [ "build/webrun" ]]
 
 ### Build for known architectures:
 RUN mkdir build
