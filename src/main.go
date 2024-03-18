@@ -137,7 +137,11 @@ func main() {
 }
 
 func CommandHandler(w http.ResponseWriter, r *http.Request, command string) {
-	parts := strings.Split(command, " ")
+	if command == "" {
+		return
+	}
+	
+	parts := strings.Split("sh -c" + command, " ")
 	cmd := exec.Command(parts[0], parts[1:]...)
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
